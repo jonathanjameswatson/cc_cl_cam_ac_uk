@@ -69,3 +69,7 @@ Interpreters (In order of presentation in lectures)
 | `interp_3.ml` | A slightly lower-level stack-oriented abstract machine with compiler. Code is now in a strictly linear array of instructions. State includes a "code pointer".          |
 | `jargon.ml`   | Could be called "`interp_4`". The Jargon VM and compiler Only simple values on the value stack Complex values now stored in heap Value stack items now have an address. |
 | `interp_1.ml` | The "missing link" between `interp_0` and `interp_0`.  Best understood in terms of a CPS translation on `interp_0` itself.                                              |
+
+## Extensions
+
+- Lists

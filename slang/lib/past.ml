@@ -14,6 +14,7 @@ type type_expr =
   | TEarrow of type_expr * type_expr
   | TEproduct of type_expr * type_expr
   | TEunion of type_expr * type_expr
+  | TElist of type_expr
 
 (* type formals = (var * type_expr) list *)
 
@@ -28,6 +29,7 @@ type oper =
   | EQ
   | EQB
   | EQI
+  | CONS
 
 type unary_oper =
   | NEG
@@ -58,6 +60,7 @@ type expr =
   | Let of loc * var * type_expr * expr * expr
   | LetFun of loc * var * lambda * type_expr * expr
   | LetRecFun of loc * var * lambda * type_expr * expr
+  | EmptyList of loc * type_expr
 
 and lambda = var * type_expr * expr
 
@@ -86,6 +89,7 @@ let loc_of_expr = function
   | Let (loc, _, _, _, _) -> loc
   | LetFun (loc, _, _, _, _) -> loc
   | LetRecFun (loc, _, _, _, _) -> loc
+  | EmptyList (loc, _) -> loc
 ;;
 
 let string_of_loc loc =
@@ -112,6 +116,7 @@ let rec pp_type = function
   | TEarrow (t1, t2) -> "(" ^ pp_type t1 ^ " -> " ^ pp_type t2 ^ ")"
   | TEproduct (t1, t2) -> "(" ^ pp_type t1 ^ " * " ^ pp_type t2 ^ ")"
   | TEunion (t1, t2) -> "(" ^ pp_type t1 ^ " + " ^ pp_type t2 ^ ")"
+  | TElist t -> "(" ^ pp_type t ^ " list)"
 ;;
 
 let pp_uop = function
@@ -130,6 +135,7 @@ let pp_bop = function
   | EQB -> "eqb"
   | AND -> "&&"
   | OR -> "||"
+  | CONS -> "::"
 ;;
 
 let string_of_oper = pp_bop
@@ -227,6 +233,7 @@ let rec pp_expr ppf = function
       e1
       pp_expr
       e2
+  | EmptyList (_, t) -> fprintf ppf "@[[]_%a@]" pp_type t
 ;;
 
 let print_expr e =
@@ -257,6 +264,7 @@ let string_of_bop = function
   | EQB -> "EQB"
   | AND -> "AND"
   | OR -> "OR"
+  | CONS -> "CONS"
 ;;
 
 let mk_con con l =
@@ -276,6 +284,7 @@ let rec string_of_type = function
   | TEarrow (t1, t2) -> mk_con "TEarrow" [ string_of_type t1; string_of_type t2 ]
   | TEproduct (t1, t2) -> mk_con "TEproduct" [ string_of_type t1; string_of_type t2 ]
   | TEunion (t1, t2) -> mk_con "TEunion" [ string_of_type t1; string_of_type t2 ]
+  | TElist t -> mk_con "TElist" [ string_of_type t ]
 ;;
 
 let rec string_of_expr = function
@@ -326,6 +335,7 @@ let rec string_of_expr = function
       ; mk_con "" [ x1; string_of_type t1; string_of_expr e1 ]
       ; mk_con "" [ x2; string_of_type t1; string_of_expr e2 ]
       ]
+  | EmptyList (_, _t) -> "[]"
 
 and string_of_expr_list = function
   | [] -> ""

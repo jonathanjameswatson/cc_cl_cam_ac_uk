@@ -11,6 +11,8 @@ and value =
   | INL of value
   | INR of value
   | FUN of (value * store -> value * store)
+  | EMPTYLIST
+  | CONS of value * value
 
 type env = Ast.var -> value
 

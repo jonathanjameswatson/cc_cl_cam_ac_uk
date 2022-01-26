@@ -10,6 +10,7 @@ type oper =
   | OR
   | EQB
   | EQI
+  | CONS
 
 type unary_oper =
   | NEG
@@ -39,6 +40,7 @@ type expr =
   | App of expr * expr
   | LetFun of var * lambda * expr
   | LetRecFun of var * lambda * expr
+  | EmptyList
 
 and lambda = var * expr
 
@@ -66,6 +68,7 @@ let pp_bop = function
   | EQB -> "eqb"
   | AND -> "&&"
   | OR -> "||"
+  | CONS -> "::"
 ;;
 
 let string_of_oper = pp_bop
@@ -133,6 +136,7 @@ let rec pp_expr ppf = function
       e1
       pp_expr
       e2
+  | EmptyList -> fstring ppf "[]"
 
 and pp_expr_list ppf = function
   | [] -> ()
@@ -168,6 +172,7 @@ let string_of_bop = function
   | EQB -> "EQB"
   | AND -> "AND"
   | OR -> "OR"
+  | CONS -> "CONS"
 ;;
 
 let mk_con con l =
@@ -212,6 +217,7 @@ let rec string_of_expr = function
       ; mk_con "" [ x1; string_of_expr e1 ]
       ; mk_con "" [ x2; string_of_expr e2 ]
       ]
+  | EmptyList -> "[]"
 
 and string_of_expr_list = function
   | [] -> ""

@@ -123,36 +123,6 @@ let make_uop loc uop (e, t) =
   | NOT, _t' -> report_expecting e "boolean" t
 ;;
 
-let make_bop loc bop (e1, t1) (e2, t2) =
-  match bop, t1, t2 with
-  | LT, TEint, TEint -> Op (loc, e1, bop, e2), TEbool
-  | LT, TEint, t -> report_expecting e2 "integer" t
-  | LT, t, _ -> report_expecting e1 "integer" t
-  | ADD, TEint, TEint -> Op (loc, e1, bop, e2), t1
-  | ADD, TEint, t -> report_expecting e2 "integer" t
-  | ADD, t, _ -> report_expecting e1 "integer" t
-  | SUB, TEint, TEint -> Op (loc, e1, bop, e2), t1
-  | SUB, TEint, t -> report_expecting e2 "integer" t
-  | SUB, t, _ -> report_expecting e1 "integer" t
-  | MUL, TEint, TEint -> Op (loc, e1, bop, e2), t1
-  | MUL, TEint, t -> report_expecting e2 "integer" t
-  | MUL, t, _ -> report_expecting e1 "integer" t
-  | DIV, TEint, TEint -> Op (loc, e1, bop, e2), t1
-  | DIV, TEint, t -> report_expecting e2 "integer" t
-  | DIV, t, _ -> report_expecting e1 "integer" t
-  | OR, TEbool, TEbool -> Op (loc, e1, bop, e2), t1
-  | OR, TEbool, t -> report_expecting e2 "boolean" t
-  | OR, t, _ -> report_expecting e1 "boolean" t
-  | AND, TEbool, TEbool -> Op (loc, e1, bop, e2), t1
-  | AND, TEbool, t -> report_expecting e2 "boolean" t
-  | AND, t, _ -> report_expecting e1 "boolean" t
-  | EQ, TEbool, TEbool -> Op (loc, e1, EQB, e2), t1
-  | EQ, TEint, TEint -> Op (loc, e1, EQI, e2), TEbool
-  | EQ, _, _ -> report_type_mismatch (e1, t1) (e2, t2)
-  | EQI, _, _ -> internal_error "EQI found in parsed AST"
-  | EQB, _, _ -> internal_error "EQB found in parsed AST"
-;;
-
 let make_while loc (e1, t1) (e2, t2) =
   if t1 = TEbool
   then
@@ -184,6 +154,46 @@ let make_case loc left right x1 x2 (e1, t1) (e2, t2) (e3, t3) =
       else report_types_not_equal loc right right'
     else report_types_not_equal loc left left'
   | t -> report_expecting e1 "disjoint union" t
+;;
+
+let make_cons loc (e1, t1) (e2, t2) =
+  match t2 with
+  | TElist t ->
+    if match_types (t, t1)
+    then Op (loc, e1, CONS, e2), t2
+    else report_types_not_equal loc t1 t
+  | t -> report_expecting e2 (string_of_type t1 ^ " list") t
+;;
+
+let make_bop loc bop (e1, t1) (e2, t2) =
+  match bop, t1, t2 with
+  | LT, TEint, TEint -> Op (loc, e1, bop, e2), TEbool
+  | LT, TEint, t -> report_expecting e2 "integer" t
+  | LT, t, _ -> report_expecting e1 "integer" t
+  | ADD, TEint, TEint -> Op (loc, e1, bop, e2), t1
+  | ADD, TEint, t -> report_expecting e2 "integer" t
+  | ADD, t, _ -> report_expecting e1 "integer" t
+  | SUB, TEint, TEint -> Op (loc, e1, bop, e2), t1
+  | SUB, TEint, t -> report_expecting e2 "integer" t
+  | SUB, t, _ -> report_expecting e1 "integer" t
+  | MUL, TEint, TEint -> Op (loc, e1, bop, e2), t1
+  | MUL, TEint, t -> report_expecting e2 "integer" t
+  | MUL, t, _ -> report_expecting e1 "integer" t
+  | DIV, TEint, TEint -> Op (loc, e1, bop, e2), t1
+  | DIV, TEint, t -> report_expecting e2 "integer" t
+  | DIV, t, _ -> report_expecting e1 "integer" t
+  | OR, TEbool, TEbool -> Op (loc, e1, bop, e2), t1
+  | OR, TEbool, t -> report_expecting e2 "boolean" t
+  | OR, t, _ -> report_expecting e1 "boolean" t
+  | AND, TEbool, TEbool -> Op (loc, e1, bop, e2), t1
+  | AND, TEbool, t -> report_expecting e2 "boolean" t
+  | AND, t, _ -> report_expecting e1 "boolean" t
+  | EQ, TEbool, TEbool -> Op (loc, e1, EQB, e2), t1
+  | EQ, TEint, TEint -> Op (loc, e1, EQI, e2), TEbool
+  | EQ, _, _ -> report_type_mismatch (e1, t1) (e2, t2)
+  | EQI, _, _ -> internal_error "EQI found in parsed AST"
+  | EQB, _, _ -> internal_error "EQB found in parsed AST"
+  | CONS, _, _ -> make_cons loc (e1, t1) (e2, t2)
 ;;
 
 let rec infer env e =
@@ -228,6 +238,7 @@ let rec infer env e =
       let env3 = (f, TEarrow (t1, t2)) :: env2 in
       make_letrecfun loc f x t1 (infer env3 body) p)
   | LetRecFun (_, _, _, _, _) -> internal_error "LetRecFun found in parsed AST"
+  | EmptyList (_, t) -> e, t
 
 and infer_seq loc env el =
   let rec aux carry = function

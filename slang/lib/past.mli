@@ -1,5 +1,5 @@
-(* 
-   The Parsed AST 
+(*
+   The Parsed AST
 *)
 type var = string
 type loc = Lexing.position
@@ -12,6 +12,7 @@ type type_expr =
   | TEarrow of type_expr * type_expr
   | TEproduct of type_expr * type_expr
   | TEunion of type_expr * type_expr
+  | TElist of type_expr
 
 type oper =
   | ADD
@@ -24,6 +25,7 @@ type oper =
   | EQ
   | EQB
   | EQI
+  | CONS
 
 type unary_oper =
   | NEG
@@ -54,6 +56,7 @@ type expr =
   | Let of loc * var * type_expr * expr * expr
   | LetFun of loc * var * lambda * type_expr * expr
   | LetRecFun of loc * var * lambda * type_expr * expr
+  | EmptyList of loc * type_expr
 
 and lambda = var * type_expr * expr
 

@@ -10,6 +10,7 @@ type oper =
   | OR
   | EQB
   | EQI
+  | CONS
 
 type unary_oper =
   | NEG
@@ -39,6 +40,7 @@ type expr =
   | App of expr * expr
   | LetFun of var * lambda * expr
   | LetRecFun of var * lambda * expr
+  | EmptyList
 
 and lambda = Past.var * expr
 

@@ -44,6 +44,8 @@ and value =
   | INL of value
   | INR of value
   | FUN of (value * store -> value * store)
+  | EMPTYLIST
+  | CONS of value * value
 
 type env = var -> value
 
@@ -53,15 +55,22 @@ type env = var -> value
 
 (* auxiliary functions *)
 
-let rec string_of_value = function
-  | REF a -> "address(" ^ string_of_int a ^ ")"
-  | BOOL b -> string_of_bool b
-  | INT n -> string_of_int n
-  | UNIT -> "()"
-  | PAIR (v1, v2) -> "(" ^ string_of_value v1 ^ ", " ^ string_of_value v2 ^ ")"
-  | INL v -> "inl(" ^ string_of_value v ^ ")"
-  | INR v -> "inr(" ^ string_of_value v ^ ")"
-  | FUN _ -> "FUNCTION( ... )"
+let rec string_of_value s =
+  let rec string_of_value_wrapped should_wrap = function
+    | REF a -> "address(" ^ string_of_int a ^ ")"
+    | BOOL b -> string_of_bool b
+    | INT n -> string_of_int n
+    | UNIT -> "()"
+    | PAIR (v1, v2) -> "(" ^ string_of_value v1 ^ ", " ^ string_of_value v2 ^ ")"
+    | INL v -> "inl(" ^ string_of_value v ^ ")"
+    | INR v -> "inr(" ^ string_of_value v ^ ")"
+    | FUN _ -> "FUNCTION( ... )"
+    | EMPTYLIST -> "[]"
+    | CONS (v1, v2) ->
+      let inner = string_of_value_wrapped true v1 ^ " :: " ^ string_of_value v2 in
+      if should_wrap then "(" ^ inner ^ ")" else inner
+  in
+  string_of_value_wrapped false s
 ;;
 
 (* update : (env * binding) -> env
@@ -91,6 +100,7 @@ let do_oper = function
   | SUB, INT m, INT n -> INT (m - n)
   | MUL, INT m, INT n -> INT (m * n)
   | DIV, INT m, INT n -> INT (m / n)
+  | CONS, v1, v2 -> CONS (v1, v2)
   | op, _, _ -> complain ("malformed binary operator: " ^ string_of_oper op)
 ;;
 
@@ -201,6 +211,7 @@ let rec interpret (e, env, store) =
       else env g
     in
     interpret (e, new_env, store)
+  | EmptyList -> EMPTYLIST, store
 ;;
 
 (* env_empty : env *)

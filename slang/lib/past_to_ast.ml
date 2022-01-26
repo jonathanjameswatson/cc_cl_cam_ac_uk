@@ -1,12 +1,12 @@
-(*   translate_expr : Past.expr -> Ast.expr 
-     Translates parsed AST to internal AST : 
-     1) drop file locations 
-     2) drop types 
-     3) remove let 
-     ) replace "?" (What) with unary function call 
+(*   translate_expr : Past.expr -> Ast.expr
+     Translates parsed AST to internal AST :
+     1) drop file locations
+     2) drop types
+     3) remove let
+     ) replace "?" (What) with unary function call
 
-  Note : our front-end drops type information.  Is this really a good idea? 
-  Could types be useful in later phases of the compiler? 
+  Note : our front-end drops type information.  Is this really a good idea?
+  Could types be useful in later phases of the compiler?
 
 *)
 
@@ -28,6 +28,7 @@ let translate_bop = function
   | Past.EQ ->
     Errors.complain
       "internal error, translate found a EQ that should have been resolved to EQI or EQB"
+  | Past.CONS -> Ast.CONS
 ;;
 
 let rec translate_expr = function
@@ -51,8 +52,8 @@ let rec translate_expr = function
   | Past.Lambda (_, l) -> Ast.Lambda (translate_lambda l)
   | Past.App (_, e1, e2) -> Ast.App (translate_expr e1, translate_expr e2)
   (*
-       Replace "let" with abstraction and application. For example, translate 
-        "let x = e1 in e2 end" to "(fun x -> e2) e1" 
+       Replace "let" with abstraction and application. For example, translate
+        "let x = e1 in e2 end" to "(fun x -> e2) e1"
     *)
   | Past.Let (_, x, _, e1, e2) ->
     Ast.App (Ast.Lambda (x, translate_expr e2), translate_expr e1)
@@ -64,5 +65,6 @@ let rec translate_expr = function
   | Past.Ref (_, e) -> Ast.Ref (translate_expr e)
   | Past.Deref (_, e) -> Ast.Deref (translate_expr e)
   | Past.Assign (_, e1, e2) -> Ast.Assign (translate_expr e1, translate_expr e2)
+  | Past.EmptyList (_, _) -> Ast.EmptyList
 
 and translate_lambda (x, _, body) = x, translate_expr body
