@@ -1,0 +1,5 @@
+(executable
+ (public_name slang)
+ (name main)
+ (modes byte exe)
+ (libraries slang))

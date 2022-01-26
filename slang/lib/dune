@@ -1,0 +1,8 @@
+(library
+ (name slang))
+
+(ocamllex
+ (modules lexer))
+
+(menhir
+ (modules parser))
