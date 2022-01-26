@@ -39,7 +39,7 @@ Options are:
 
 Every .ml file has an associated .mli file describing its interface.
 
-| File             | Use                                                                       |
+| File             | Description                                                               |
 | ---------------- | ------------------------------------------------------------------------- |
 | `errors.ml`      | Error exception                                                           |
 | `past.ml`        | the Parsed AST, with pretty printing                                      |
@@ -56,16 +56,16 @@ Every .ml file has an associated .mli file describing its interface.
 Interpreters (In order of presentation in lectures)
 
 
-| File                                          | Description                                                                                                                                                           |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `interp_0.ml`                                   | The "definitional" interpreter.                                                                                                                                       |
-| `interp_2.ml`                                   | A high-level stack-oriented abstract machine with compiler.                                                                                                           |
-|| What do I mean by "high-level"?               |
-|| - Code is still tree-structured.              |
-|| - Complex values are pushed onto value stack. |
-|| - Heap used only for references.              |
-|| - Code is maintained on a code stack.         |
-|| - Program variables contained in code.        |
-| `interp_3.ml`                                   | A slightly lower-level stack-oriented abstract machine with compiler. Code is now in a strictly linear array of instructions. State includes a "code pointer".        |
-| `jargon.ml`                                     | Could be called "`interp_4`". The Jargon VM and compiler Only simple values on the value stack Complex values now stored in heap Value stack items now have an address. |
-| `interp_1.ml`                                   | The "missing link" between `interp_0` and `interp_0`.  Best understood in terms of a CPS translation on `interp_0` itself.                                                  |
+| File          | Description                                                                                                                                                             |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interp_0.ml` | The "definitional" interpreter.                                                                                                                                         |
+| `interp_2.ml` | A high-level stack-oriented abstract machine with compiler.                                                                                                             |
+|               | What do I mean by "high-level"?                                                                                                                                         |
+|               | - Code is still tree-structured.                                                                                                                                        |
+|               | - Complex values are pushed onto value stack.                                                                                                                           |
+|               | - Heap used only for references.                                                                                                                                        |
+|               | - Code is maintained on a code stack.                                                                                                                                   |
+|               | - Program variables contained in code.                                                                                                                                  |
+| `interp_3.ml` | A slightly lower-level stack-oriented abstract machine with compiler. Code is now in a strictly linear array of instructions. State includes a "code pointer".          |
+| `jargon.ml`   | Could be called "`interp_4`". The Jargon VM and compiler Only simple values on the value stack Complex values now stored in heap Value stack items now have an address. |
+| `interp_1.ml` | The "missing link" between `interp_0` and `interp_0`.  Best understood in terms of a CPS translation on `interp_0` itself.                                              |
