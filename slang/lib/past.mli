@@ -57,6 +57,7 @@ type expr =
   | LetFun of loc * var * lambda * type_expr * expr
   | LetRecFun of loc * var * lambda * type_expr * expr
   | EmptyList of loc * type_expr
+  | ListCase of loc * expr * expr * (var * type_expr * lambda)
 
 and lambda = var * type_expr * expr
 

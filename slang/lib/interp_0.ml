@@ -212,6 +212,13 @@ let rec interpret (e, env, store) =
     in
     interpret (e, new_env, store)
   | EmptyList -> EMPTYLIST, store
+  | ListCase (e, e1, (x, (xs, e2))) ->
+    let v, store' = interpret (e, env, store) in
+    (match v with
+    | EMPTYLIST -> interpret (e1, env, store')
+    | CONS (head, tail) ->
+      interpret (e2, update (update (env, (x, head)), (xs, tail)), store')
+    | _v -> complain "runtime error.  Expecting list!")
 ;;
 
 (* env_empty : env *)

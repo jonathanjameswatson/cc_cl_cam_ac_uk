@@ -41,6 +41,7 @@ type expr =
   | LetFun of var * lambda * expr
   | LetRecFun of var * lambda * expr
   | EmptyList
+  | ListCase of expr * expr * (Past.var * lambda)
 
 and lambda = Past.var * expr
 

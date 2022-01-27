@@ -41,6 +41,7 @@ type expr =
   | LetFun of var * lambda * expr
   | LetRecFun of var * lambda * expr
   | EmptyList
+  | ListCase of expr * expr * (Past.var * lambda)
 
 and lambda = var * expr
 
@@ -137,6 +138,20 @@ let rec pp_expr ppf = function
       pp_expr
       e2
   | EmptyList -> fstring ppf "[]"
+  | ListCase (e, e1, (x, (xs, e2))) ->
+    fprintf
+      ppf
+      "@[<2>case %a of@ | [] -> %a @ | %a :: %a -> %a end@]"
+      pp_expr
+      e
+      pp_expr
+      e1
+      fstring
+      x
+      fstring
+      xs
+      pp_expr
+      e2
 
 and pp_expr_list ppf = function
   | [] -> ()
@@ -218,6 +233,10 @@ let rec string_of_expr = function
       ; mk_con "" [ x2; string_of_expr e2 ]
       ]
   | EmptyList -> "[]"
+  | ListCase (e, e1, (x, (xs, e2))) ->
+    mk_con
+      "Case"
+      [ string_of_expr e; string_of_expr e1; mk_con "" [ x; xs; string_of_expr e2 ] ]
 
 and string_of_expr_list = function
   | [] -> ""

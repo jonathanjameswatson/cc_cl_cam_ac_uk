@@ -165,6 +165,21 @@ let make_cons loc (e1, t1) (e2, t2) =
   | t -> report_expecting e2 (string_of_type t1 ^ " list") t
 ;;
 
+let make_list_case loc t ts x xs (e1, t1) (e2, t2) (e3, t3) =
+  match t1 with
+  | TElist t' ->
+    if match_types (t, t')
+    then
+      if match_types (ts, TElist t')
+      then
+        if match_types (t2, t3)
+        then ListCase (loc, e1, e2, (x, t, (xs, ts, e3))), t2
+        else report_type_mismatch (e2, t2) (e3, t3)
+      else report_types_not_equal loc ts (TElist t')
+    else report_types_not_equal loc t t'
+  | t' -> report_expecting e1 (string_of_type t ^ " list") t'
+;;
+
 let make_bop loc bop (e1, t1) (e2, t2) =
   match bop, t1, t2 with
   | LT, TEint, TEint -> Op (loc, e1, bop, e2), TEbool
@@ -239,6 +254,16 @@ let rec infer env e =
       make_letrecfun loc f x t1 (infer env3 body) p)
   | LetRecFun (_, _, _, _, _) -> internal_error "LetRecFun found in parsed AST"
   | EmptyList (_, t) -> e, t
+  | ListCase (loc, e, e1, (x, t, (xs, ts, e2))) ->
+    make_list_case
+      loc
+      t
+      ts
+      x
+      xs
+      (infer env e)
+      (infer env e1)
+      (infer ((x, t) :: (xs, ts) :: env) e2)
 
 and infer_seq loc env el =
   let rec aux carry = function

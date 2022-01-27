@@ -61,6 +61,7 @@ type expr =
   | LetFun of loc * var * lambda * type_expr * expr
   | LetRecFun of loc * var * lambda * type_expr * expr
   | EmptyList of loc * type_expr
+  | ListCase of loc * expr * expr * (var * type_expr * lambda)
 
 and lambda = var * type_expr * expr
 
@@ -90,6 +91,7 @@ let loc_of_expr = function
   | LetFun (loc, _, _, _, _) -> loc
   | LetRecFun (loc, _, _, _, _) -> loc
   | EmptyList (loc, _) -> loc
+  | ListCase (loc, _, _, _) -> loc
 ;;
 
 let string_of_loc loc =
@@ -234,6 +236,22 @@ let rec pp_expr ppf = function
       pp_expr
       e2
   | EmptyList (_, t) -> fprintf ppf "@[[]_%a@]" pp_type t
+  | ListCase (_, e, e1, (x, _, (xs, ts, e2))) ->
+    fprintf
+      ppf
+      "@[<2>case %a of@ | [] -> %a @ | %a :: %a : %a -> %a end@]"
+      pp_expr
+      e
+      pp_expr
+      e1
+      fstring
+      x
+      fstring
+      xs
+      pp_type
+      ts
+      pp_expr
+      e2
 ;;
 
 let print_expr e =
@@ -328,14 +346,21 @@ let rec string_of_expr = function
       ; string_of_type t2
       ; string_of_expr e2
       ]
-  | Case (_, e, (x1, t1, e1), (x2, _t2, e2)) ->
+  | Case (_, e, (x1, t1, e1), (x2, t2, e2)) ->
     mk_con
       "Case"
       [ string_of_expr e
       ; mk_con "" [ x1; string_of_type t1; string_of_expr e1 ]
-      ; mk_con "" [ x2; string_of_type t1; string_of_expr e2 ]
+      ; mk_con "" [ x2; string_of_type t2; string_of_expr e2 ]
       ]
   | EmptyList (_, _t) -> "[]"
+  | ListCase (_, e, e1, (x, _t, (xs, ts, e2))) ->
+    mk_con
+      "Case"
+      [ string_of_expr e
+      ; string_of_expr e1
+      ; mk_con "" [ x; xs; string_of_type ts; string_of_expr e2 ]
+      ]
 
 and string_of_expr_list = function
   | [] -> ""

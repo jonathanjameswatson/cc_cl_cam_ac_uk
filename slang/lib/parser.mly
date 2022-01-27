@@ -90,6 +90,13 @@ expr:
   BAR INR LPAREN IDENT COLON texpr RPAREN  ARROW expr
   END
                                      { Past.Case (get_loc(), $2, ($6, $8, $11), ($15, $17, $20)) }
+
+| CASE expr OF
+      EMPTYLIST ARROW expr
+  BAR IDENT CONS IDENT COLON texpr LIST ARROW expr
+  END
+                                     { Past.ListCase (get_loc(), $2, $6, ($8, $12, ($10, Past.TElist ($12), $15))) }
+
 | EMPTYLIST COLON texpr              { Past.EmptyList(get_loc(), Past.TElist ($3)) }
 
 exprlist:

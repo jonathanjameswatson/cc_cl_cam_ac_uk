@@ -66,5 +66,7 @@ let rec translate_expr = function
   | Past.Deref (_, e) -> Ast.Deref (translate_expr e)
   | Past.Assign (_, e1, e2) -> Ast.Assign (translate_expr e1, translate_expr e2)
   | Past.EmptyList (_, _) -> Ast.EmptyList
+  | Past.ListCase (_, e, e1, (x, _, l2)) ->
+    Ast.ListCase (translate_expr e, translate_expr e1, (x, translate_lambda l2))
 
 and translate_lambda (x, _, body) = x, translate_expr body
