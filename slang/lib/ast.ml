@@ -235,7 +235,7 @@ let rec string_of_expr = function
   | EmptyList -> "[]"
   | ListCase (e, e1, (x, (xs, e2))) ->
     mk_con
-      "Case"
+      "ListCase"
       [ string_of_expr e; string_of_expr e1; mk_con "" [ x; xs; string_of_expr e2 ] ]
 
 and string_of_expr_list = function

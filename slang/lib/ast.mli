@@ -41,9 +41,9 @@ type expr =
   | LetFun of var * lambda * expr
   | LetRecFun of var * lambda * expr
   | EmptyList
-  | ListCase of expr * expr * (Past.var * lambda)
+  | ListCase of expr * expr * (var * lambda)
 
-and lambda = Past.var * expr
+and lambda = var * expr
 
 (* printing *)
 val string_of_unary_oper : unary_oper -> string
