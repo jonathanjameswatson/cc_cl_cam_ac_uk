@@ -32,6 +32,8 @@ type value =
   | INR of value
   | CLOSURE of closure
   | REC_CLOSURE of code
+  | EMPTYLIST
+  | CONS of value * value
 
 and closure = code * env
 
@@ -43,7 +45,7 @@ and instruction =
   | ASSIGN
   | SWAP
   | POP
-  | BIND of var
+  | BIND of var list
   | FST
   | SND
   | DEREF
@@ -57,6 +59,7 @@ and instruction =
   | TEST of code * code
   | CASE of code * code
   | WHILE of code * code
+  | LISTCASE of code * code
 
 and code = instruction list
 and binding = var * value
@@ -84,16 +87,23 @@ let string_of_list sep f l =
   "[" ^ aux f l ^ "]"
 ;;
 
-let rec string_of_value = function
-  | REF a -> "REF(" ^ string_of_int a ^ ")"
-  | BOOL b -> string_of_bool b
-  | INT n -> string_of_int n
-  | UNIT -> "UNIT"
-  | PAIR (v1, v2) -> "(" ^ string_of_value v1 ^ ", " ^ string_of_value v2 ^ ")"
-  | INL v -> "inl(" ^ string_of_value v ^ ")"
-  | INR v -> "inr(" ^ string_of_value v ^ ")"
-  | CLOSURE cl -> "CLOSURE(" ^ string_of_closure cl ^ ")"
-  | REC_CLOSURE c -> "REC_CLOSURE(" ^ string_of_code c ^ ")"
+let rec string_of_value s =
+  let rec string_of_value_wrapped should_wrap = function
+    | REF a -> "REF(" ^ string_of_int a ^ ")"
+    | BOOL b -> string_of_bool b
+    | INT n -> string_of_int n
+    | UNIT -> "UNIT"
+    | PAIR (v1, v2) -> "(" ^ string_of_value v1 ^ ", " ^ string_of_value v2 ^ ")"
+    | INL v -> "inl(" ^ string_of_value v ^ ")"
+    | INR v -> "inr(" ^ string_of_value v ^ ")"
+    | CLOSURE cl -> "CLOSURE(" ^ string_of_closure cl ^ ")"
+    | REC_CLOSURE c -> "REC_CLOSURE(" ^ string_of_code c ^ ")"
+    | EMPTYLIST -> "[]"
+    | CONS (v1, v2) ->
+      let inner = string_of_value_wrapped true v1 ^ " :: " ^ string_of_value v2 in
+      if should_wrap then "(" ^ inner ^ ")" else inner
+  in
+  string_of_value_wrapped false s
 
 and string_of_closure (c, env) = "(" ^ string_of_code c ^ ", " ^ string_of_env env ^ ")"
 and string_of_env env = string_of_list ",\n " string_of_binding env
@@ -114,13 +124,19 @@ and string_of_instruction = function
   | CASE (c1, c2) -> "CASE(" ^ string_of_code c1 ^ ", " ^ string_of_code c2 ^ ")"
   | WHILE (c1, c2) -> "WHILE(" ^ string_of_code c1 ^ ", " ^ string_of_code c2 ^ ")"
   | APPLY -> "APPLY"
-  | BIND x -> "BIND " ^ x
+  | BIND x ->
+    let rec string_of_var_list = function
+      | x :: xs -> x ^ ", " ^ string_of_var_list xs
+      | [] -> ""
+    in
+    "BIND(" ^ string_of_var_list x ^ ")"
   | SWAP -> "SWAP"
   | POP -> "POP"
   | DEREF -> "DEREF"
   | ASSIGN -> "ASSIGN"
   | MK_CLOSURE c -> "MK_CLOSURE(" ^ string_of_code c ^ ")"
   | MK_REC (f, c) -> "MK_REC(" ^ f ^ ", " ^ string_of_code c ^ ")"
+  | LISTCASE (c1, c2) -> "LISTCASE(" ^ string_of_code c1 ^ ", " ^ string_of_code c2 ^ ")"
 
 and string_of_code c = string_of_list ";\n " string_of_instruction c
 
@@ -241,6 +257,7 @@ let do_oper = function
   | SUB, INT m, INT n -> INT (m - n)
   | MUL, INT m, INT n -> INT (m * n)
   | DIV, INT m, INT n -> INT (m / n)
+  | CONS, v1, v2 -> CONS (v1, v2)
   | op, _, _ -> complain ("malformed binary operator: " ^ string_of_oper op)
 ;;
 
@@ -253,7 +270,15 @@ let step = function
   | PUSH v :: ds, evs, s -> ds, V v :: evs, s
   | POP :: ds, _e :: evs, s -> ds, evs, s
   | SWAP :: ds, e1 :: e2 :: evs, s -> ds, e2 :: e1 :: evs, s
-  | BIND x :: ds, V v :: evs, s -> ds, EV [ x, v ] :: evs, s
+  | BIND xs :: ds, evs, s ->
+    let rec bind_many evs' = function
+      | V v :: evs, x :: xs -> EV [ x, v ] :: bind_many evs' (evs, xs)
+      | evs, [] -> evs' @ evs
+      | _ ->
+        complain
+          ("step : bad state = " ^ string_of_interp_state (BIND xs :: ds, evs, s) ^ "\n")
+    in
+    ds, bind_many [] (evs, xs), s
   | LOOKUP x :: ds, evs, s -> ds, V (search (evs, x)) :: evs, s
   | UNARY op :: ds, V v :: evs, s -> ds, V (do_unary (op, v)) :: evs, s
   | OPER op :: ds, V v2 :: V v1 :: evs, s -> ds, V (do_oper (op, v1, v2)) :: evs, s
@@ -277,6 +302,8 @@ let step = function
   | MK_CLOSURE c :: ds, evs, s -> ds, V (mk_fun (c, evs_to_env evs)) :: evs, s
   | MK_REC (f, c) :: ds, evs, s -> ds, V (mk_rec (f, c, evs_to_env evs)) :: evs, s
   | APPLY :: ds, V (CLOSURE (c, env)) :: V v :: evs, s -> c @ ds, V v :: EV env :: evs, s
+  | LISTCASE (c1, _) :: ds, V EMPTYLIST :: evs, s -> c1 @ ds, evs, s
+  | LISTCASE (_, c2) :: ds, V (CONS (v1, v2)) :: evs, s -> c2 @ ds, V v1 :: V v2 :: evs, s
   | state -> complain ("step : bad state = " ^ string_of_interp_state state ^ "\n")
 ;;
 
@@ -314,7 +341,9 @@ let rec compile = function
   | Inr e -> compile e @ [ MK_INR ]
   | Case (e, (x1, e1), (x2, e2)) ->
     compile e
-    @ [ CASE ((BIND x1 :: compile e1) @ leave_scope, (BIND x2 :: compile e2) @ leave_scope)
+    @ [ CASE
+          ( (BIND [ x1 ] :: compile e1) @ leave_scope
+          , (BIND [ x2 ] :: compile e2) @ leave_scope )
       ]
   | If (e1, e2, e3) -> compile e1 @ [ TEST (compile e2, compile e3) ]
   | Seq [] -> []
@@ -329,13 +358,18 @@ let rec compile = function
   | App (e1, e2) ->
     compile e2 (* I chose to evaluate arg first *) @ compile e1 @ [ APPLY; SWAP; POP ]
     (* get rid of env left on stack *)
-  | Lambda (x, e) -> [ MK_CLOSURE ((BIND x :: compile e) @ leave_scope) ]
+  | Lambda (x, e) -> [ MK_CLOSURE ((BIND [ x ] :: compile e) @ leave_scope) ]
   | LetFun (f, (x, body), e) ->
-    (MK_CLOSURE ((BIND x :: compile body) @ leave_scope) :: BIND f :: compile e)
+    (MK_CLOSURE ((BIND [ x ] :: compile body) @ leave_scope) :: BIND [ f ] :: compile e)
     @ leave_scope
   | LetRecFun (f, (x, body), e) ->
-    (MK_REC (f, (BIND x :: compile body) @ leave_scope) :: BIND f :: compile e)
+    (MK_REC (f, (BIND [ x ] :: compile body) @ leave_scope) :: BIND [ f ] :: compile e)
     @ leave_scope
+  | EmptyList -> [ PUSH EMPTYLIST ]
+  | ListCase (e, e1, (x, (xs, e2))) ->
+    compile e
+    @ [ LISTCASE (compile e1, (BIND [ x; xs ] :: compile e2) @ leave_scope @ leave_scope)
+      ]
 ;;
 
 (* The initial Slang state is the Slang state : all locations contain 0 *)

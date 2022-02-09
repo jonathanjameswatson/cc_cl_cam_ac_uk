@@ -11,6 +11,8 @@ type value =
   | INR of value
   | CLOSURE of closure
   | REC_CLOSURE of code
+  | EMPTYLIST
+  | CONS of value * value
 
 and closure = code * env
 
@@ -22,7 +24,7 @@ and instruction =
   | ASSIGN
   | SWAP
   | POP
-  | BIND of var
+  | BIND of var list
   | FST
   | SND
   | DEREF
@@ -36,6 +38,7 @@ and instruction =
   | TEST of code * code
   | CASE of code * code
   | WHILE of code * code
+  | LISTCASE of code * code
 
 and code = instruction list
 and binding = Ast.var * value
