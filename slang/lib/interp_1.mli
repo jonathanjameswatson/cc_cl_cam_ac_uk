@@ -10,6 +10,8 @@ type value =
   | INR of value
   | REC_CLOSURE of closure
   | CLOSURE of closure
+  | EMPTYLIST
+  | CONS of value * value
 
 and closure = Ast.var * Ast.expr * env
 
@@ -33,6 +35,7 @@ and continuation_action =
   | CASE of Ast.var * Ast.expr * Ast.var * Ast.expr * env
   | APPLY of value
   | ARG of Ast.expr * env
+  | LISTCASE of Ast.expr * Ast.var * Ast.var * Ast.expr * env
 
 and continuation = continuation_action list
 and binding = Ast.var * value

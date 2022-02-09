@@ -28,6 +28,8 @@ type value =
   | INR of value
   | REC_CLOSURE of closure
   | CLOSURE of closure
+  | EMPTYLIST
+  | CONS of value * value
 
 and closure = var * expr * env
 
@@ -51,6 +53,7 @@ and continuation_action =
   | CASE of var * expr * var * expr * env
   | APPLY of value
   | ARG of expr * env
+  | LISTCASE of expr * var * var * expr * env
 
 and continuation = continuation_action list
 and binding = var * value
@@ -133,6 +136,7 @@ let do_oper = function
   | SUB, INT m, INT n -> INT (m - n)
   | MUL, INT m, INT n -> INT (m * n)
   | DIV, INT m, INT n -> INT (m / n)
+  | CONS, v1, v2 -> CONS (v1, v2)
   | op, _, _ -> complain ("malformed binary operator: " ^ string_of_oper op)
 ;;
 
@@ -145,16 +149,23 @@ let string_of_list sep f l =
   "[" ^ aux f l ^ "]"
 ;;
 
-let rec string_of_value = function
-  | REF a -> "REF(" ^ string_of_int a ^ ")"
-  | BOOL b -> string_of_bool b
-  | INT n -> string_of_int n
-  | UNIT -> "UNIT"
-  | PAIR (v1, v2) -> "PAIR(" ^ string_of_value v1 ^ ", " ^ string_of_value v2 ^ ")"
-  | INL v -> "INL(" ^ string_of_value v ^ ")"
-  | INR v -> "INR(" ^ string_of_value v ^ ")"
-  | CLOSURE cl -> "CLOSURE(" ^ string_of_closure cl ^ ")"
-  | REC_CLOSURE cl -> "REC_CLOSURE(" ^ string_of_closure cl ^ ")"
+let rec string_of_value s =
+  let rec string_of_value_wrapped should_wrap = function
+    | REF a -> "REF(" ^ string_of_int a ^ ")"
+    | BOOL b -> string_of_bool b
+    | INT n -> string_of_int n
+    | UNIT -> "UNIT"
+    | PAIR (v1, v2) -> "PAIR(" ^ string_of_value v1 ^ ", " ^ string_of_value v2 ^ ")"
+    | INL v -> "INL(" ^ string_of_value v ^ ")"
+    | INR v -> "INR(" ^ string_of_value v ^ ")"
+    | CLOSURE cl -> "CLOSURE(" ^ string_of_closure cl ^ ")"
+    | REC_CLOSURE cl -> "REC_CLOSURE(" ^ string_of_closure cl ^ ")"
+    | EMPTYLIST -> "[]"
+    | CONS (v1, v2) ->
+      let inner = string_of_value_wrapped true v1 ^ " :: " ^ string_of_value v2 in
+      if should_wrap then "(" ^ inner ^ ")" else inner
+  in
+  string_of_value_wrapped false s
 
 and string_of_closure (x, e, env) =
   x ^ ", " ^ Ast.string_of_expr e ^ ", " ^ string_of_env env
@@ -218,6 +229,18 @@ let string_of_continuation_action = function
     ^ ")"
   | MKREF -> "MKREF"
   | DEREF -> "DEREF"
+  | LISTCASE (e1, x, xs, e2, env) ->
+    "LISTCASE("
+    ^ Ast.string_of_expr e1
+    ^ ", "
+    ^ x
+    ^ ", "
+    ^ xs
+    ^ ", "
+    ^ Ast.string_of_expr e2
+    ^ ", "
+    ^ string_of_env env
+    ^ ")"
 ;;
 
 let string_of_continuation = string_of_list ";\n " string_of_continuation_action
@@ -281,6 +304,9 @@ let step = function
   | EXAMINE (Integer n, _, k) -> COMPUTE (k, INT n)
   | EXAMINE (Boolean b, _, k) -> COMPUTE (k, BOOL b)
   | EXAMINE (Lambda (x, body), env, k) -> COMPUTE (k, mk_fun (x, body, env))
+  | EXAMINE (EmptyList, _, k) -> COMPUTE (k, EMPTYLIST)
+  | EXAMINE (ListCase (e, e1, (x, (xs, e2))), env, k) ->
+    EXAMINE (e, env, LISTCASE (e1, x, xs, e2, env) :: k)
   (* COMPUTE --> COMPUTE *)
   | COMPUTE (UNARY op :: k, v) -> COMPUTE (k, do_unary (op, v))
   | COMPUTE (OPER (op, v1) :: k, v2) -> COMPUTE (k, do_oper (op, v1, v2))
@@ -313,6 +339,9 @@ let step = function
   | COMPUTE (WHILE (e1, e2, env) :: k, BOOL true) ->
     EXAMINE (Seq [ e2; e1 ], env, WHILE (e1, e2, env) :: k)
   | COMPUTE (TAIL (el, env) :: k, _) -> EXAMINE (Seq el, env, k)
+  | COMPUTE (LISTCASE (e1, _x, _xs, _e2, env) :: k, EMPTYLIST) -> EXAMINE (e1, env, k)
+  | COMPUTE (LISTCASE (_e1, x, xs, e2, env) :: k, CONS (head, tail)) ->
+    EXAMINE (e2, update (update (env, (x, head)), (xs, tail)), k)
   | state -> complain ("step : malformed state = " ^ string_of_state state ^ "\n")
 ;;
 
