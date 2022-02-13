@@ -12,6 +12,8 @@ type value =
   | INR of value
   | CLOSURE of location * env
   | REC_CLOSURE of location
+  | EMPTYLIST
+  | CONS of value * value
 
 and instruction =
   | PUSH of value
@@ -21,7 +23,7 @@ and instruction =
   | ASSIGN
   | SWAP
   | POP
-  | BIND of Ast.var
+  | BIND of Ast.var list
   | FST
   | SND
   | DEREF
@@ -38,6 +40,7 @@ and instruction =
   | GOTO of location
   | LABEL of label
   | HALT
+  | LISTCASE of location
 
 and code = instruction list
 and binding = Ast.var * value

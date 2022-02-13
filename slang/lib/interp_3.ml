@@ -33,6 +33,8 @@ type value =
   | INR of value
   | CLOSURE of location * env
   | REC_CLOSURE of location
+  | EMPTYLIST
+  | CONS of value * value
 
 and instruction =
   | PUSH of value
@@ -42,7 +44,7 @@ and instruction =
   | ASSIGN
   | SWAP
   | POP
-  | BIND of var
+  | BIND of var list
   | FST
   | SND
   | DEREF
@@ -59,6 +61,7 @@ and instruction =
   | GOTO of location
   | LABEL of label
   | HALT
+  | LISTCASE of location
 
 and code = instruction list
 and binding = var * value
@@ -116,16 +119,23 @@ let string_of_list sep f l =
   "[" ^ aux f l ^ "]"
 ;;
 
-let rec string_of_value = function
-  | REF a -> "REF(" ^ string_of_int a ^ ")"
-  | BOOL b -> string_of_bool b
-  | INT n -> string_of_int n
-  | UNIT -> "UNIT"
-  | PAIR (v1, v2) -> "(" ^ string_of_value v1 ^ ", " ^ string_of_value v2 ^ ")"
-  | INL v -> "inl(" ^ string_of_value v ^ ")"
-  | INR v -> "inr(" ^ string_of_value v ^ ")"
-  | CLOSURE (loc, c) -> "CLOSURE(" ^ string_of_closure (loc, c) ^ ")"
-  | REC_CLOSURE loc -> "REC_CLOSURE(" ^ string_of_location loc ^ ")"
+let rec string_of_value s =
+  let rec string_of_value_wrapped should_wrap = function
+    | REF a -> "REF(" ^ string_of_int a ^ ")"
+    | BOOL b -> string_of_bool b
+    | INT n -> string_of_int n
+    | UNIT -> "UNIT"
+    | PAIR (v1, v2) -> "(" ^ string_of_value v1 ^ ", " ^ string_of_value v2 ^ ")"
+    | INL v -> "inl(" ^ string_of_value v ^ ")"
+    | INR v -> "inr(" ^ string_of_value v ^ ")"
+    | CLOSURE (loc, c) -> "CLOSURE(" ^ string_of_closure (loc, c) ^ ")"
+    | REC_CLOSURE loc -> "REC_CLOSURE(" ^ string_of_location loc ^ ")"
+    | EMPTYLIST -> "[]"
+    | CONS (v1, v2) ->
+      let inner = string_of_value_wrapped true v1 ^ " :: " ^ string_of_value v2 in
+      if should_wrap then "(" ^ inner ^ ")" else inner
+  in
+  string_of_value_wrapped false s
 
 and string_of_closure (loc, env) =
   "(" ^ string_of_location loc ^ ", " ^ string_of_env env ^ ")"
@@ -154,7 +164,12 @@ and string_of_instruction = function
   | APPLY -> "APPLY"
   | RETURN -> "RETURN"
   | HALT -> "HALT"
-  | BIND x -> "BIND " ^ x
+  | BIND x ->
+    let rec string_of_var_list = function
+      | x :: xs -> x ^ ", " ^ string_of_var_list xs
+      | [] -> ""
+    in
+    "BIND(" ^ string_of_var_list x ^ ")"
   | LABEL l -> "LABEL " ^ l
   | SWAP -> "SWAP"
   | POP -> "POP"
@@ -162,6 +177,7 @@ and string_of_instruction = function
   | ASSIGN -> "ASSIGN"
   | MK_CLOSURE loc -> "MK_CLOSURE(" ^ string_of_location loc ^ ")"
   | MK_REC (v, loc) -> "MK_REC(" ^ v ^ ", " ^ string_of_location loc ^ ")"
+  | LISTCASE l -> "LISTCASE " ^ string_of_location l
 
 and string_of_code c = string_of_list "\n " string_of_instruction c
 
@@ -238,6 +254,7 @@ let do_oper = function
   | SUB, INT m, INT n -> INT (m - n)
   | MUL, INT m, INT n -> INT (m * n)
   | DIV, INT m, INT n -> INT (m / n)
+  | CONS, v1, v2 -> CONS (v1, v2)
   | op, _, _ -> complain ("malformed binary operator: " ^ string_of_oper op)
 ;;
 
@@ -246,7 +263,13 @@ let step (cp, evs) =
   | PUSH v, evs -> cp + 1, V v :: evs
   | POP, _s :: evs -> cp + 1, evs
   | SWAP, s1 :: s2 :: evs -> cp + 1, s2 :: s1 :: evs
-  | BIND x, V v :: evs -> cp + 1, EV [ x, v ] :: evs
+  | BIND xs, evs ->
+    let rec bind_many evs' = function
+      | V v :: evs, x :: xs -> EV [ x, v ] :: bind_many evs' (evs, xs)
+      | evs, [] -> evs' @ evs
+      | _ -> complain ("step : bad state = " ^ string_of_state (cp, evs) ^ "\n")
+    in
+    cp + 1, bind_many [] (evs, xs)
   | LOOKUP x, evs -> cp + 1, V (search (evs, x)) :: evs
   | UNARY op, V v :: evs -> cp + 1, V (do_unary (op, v)) :: evs
   | OPER op, V v2 :: V v1 :: evs -> cp + 1, V (do_oper (op, v1, v2)) :: evs
@@ -277,6 +300,8 @@ let step (cp, evs) =
   | LABEL _l, evs -> cp + 1, evs
   | HALT, evs -> cp, evs
   | GOTO (_, Some i), evs -> i, evs
+  | LISTCASE (_, Some _), V EMPTYLIST :: evs -> cp + 1, evs
+  | LISTCASE (_, Some i), V (CONS (v1, v2)) :: evs -> i, V v1 :: V v2 :: evs
   | _ -> complain ("step : bad state = " ^ string_of_state (cp, evs) ^ "\n")
 ;;
 
@@ -329,9 +354,9 @@ let rec comp = function
     ( defs1 @ defs2 @ defs3
     , c1
       @ [ CASE (inr_label, None) ]
-      @ ((BIND x1 :: c2) @ [ SWAP; POP ])
+      @ ((BIND [ x1 ] :: c2) @ [ SWAP; POP ])
       @ [ GOTO (after_inr_label, None); LABEL inr_label ]
-      @ ((BIND x2 :: c3) @ [ SWAP; POP ])
+      @ ((BIND [ x2 ] :: c3) @ [ SWAP; POP ])
       @ [ LABEL after_inr_label ] )
   | If (e1, e2, e3) ->
     let else_label = new_label () in
@@ -380,7 +405,7 @@ let rec comp = function
   | Lambda (x, e) ->
     let defs, c = comp e in
     let f = new_label () in
-    let def = [ LABEL f; BIND x ] @ c @ [ SWAP; POP; RETURN ] in
+    let def = [ LABEL f; BIND [ x ] ] @ c @ [ SWAP; POP; RETURN ] in
     def @ defs, [ MK_CLOSURE (f, None) ]
   (*
  Note that we could have
@@ -409,14 +434,28 @@ let rec comp = function
     let defs1, c1 = comp e1 in
     let defs2, c2 = comp e2 in
     let lab = new_label () in
-    let def = [ LABEL lab; BIND x ] @ c1 @ [ SWAP; POP; RETURN ] in
-    def @ defs1 @ defs2, [ MK_CLOSURE (lab, None); BIND f ] @ c2 @ [ SWAP; POP ]
+    let def = [ LABEL lab; BIND [ x ] ] @ c1 @ [ SWAP; POP; RETURN ] in
+    def @ defs1 @ defs2, [ MK_CLOSURE (lab, None); BIND [ f ] ] @ c2 @ [ SWAP; POP ]
   | LetRecFun (f, (x, e1), e2) ->
     let defs1, c1 = comp e1 in
     let defs2, c2 = comp e2 in
     let lab = new_label () in
-    let def = [ LABEL lab; BIND x ] @ c1 @ [ SWAP; POP; RETURN ] in
-    def @ defs1 @ defs2, [ MK_REC (f, (lab, None)); BIND f ] @ c2 @ [ SWAP; POP ]
+    let def = [ LABEL lab; BIND [ x ] ] @ c1 @ [ SWAP; POP; RETURN ] in
+    def @ defs1 @ defs2, [ MK_REC (f, (lab, None)); BIND [ f ] ] @ c2 @ [ SWAP; POP ]
+  | EmptyList -> [], [ PUSH EMPTYLIST ]
+  | ListCase (e, e1, (x, (xs, e2))) ->
+    let cons_label = new_label () in
+    let after_cons_label = new_label () in
+    let defs, c = comp e in
+    let defs1, c1 = comp e1 in
+    let defs2, c2 = comp e2 in
+    ( defs @ defs1 @ defs2
+    , c
+      @ [ LISTCASE (cons_label, None) ]
+      @ c1
+      @ [ GOTO (after_cons_label, None); LABEL cons_label ]
+      @ ((BIND [ x; xs ] :: c2) @ [ SWAP; POP ] @ [ SWAP; POP ])
+      @ [ LABEL after_cons_label ] )
 ;;
 
 let compile e =
@@ -460,6 +499,7 @@ let load l =
     | CASE (lab, _) -> CASE (lab, Some (find lab m))
     | MK_CLOSURE (lab, _) -> MK_CLOSURE (lab, Some (find lab m))
     | MK_REC (f, (lab, _)) -> MK_REC (f, (lab, Some (find lab m)))
+    | LISTCASE (lab, _) -> LISTCASE (lab, Some (find lab m))
     (*
      | MK_CLOSURE ((lab, _), fvars) -> MK_CLOSURE((lab, Some(find lab m)), fvars)
 *)
