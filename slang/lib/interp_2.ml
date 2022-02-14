@@ -271,14 +271,14 @@ let step = function
   | POP :: ds, _e :: evs, s -> ds, evs, s
   | SWAP :: ds, e1 :: e2 :: evs, s -> ds, e2 :: e1 :: evs, s
   | BIND xs :: ds, evs, s ->
-    let rec bind_many evs' = function
-      | V v :: evs, x :: xs -> EV [ x, v ] :: bind_many evs' (evs, xs)
-      | evs, [] -> evs' @ evs
+    let rec bind_many = function
+      | EV envs, V v :: evs, x :: xs -> bind_many (EV ((x, v) :: envs), evs, xs)
+      | ev, evs, [] -> ev :: evs
       | _ ->
         complain
           ("step : bad state = " ^ string_of_interp_state (BIND xs :: ds, evs, s) ^ "\n")
     in
-    ds, bind_many [] (evs, xs), s
+    ds, bind_many (EV [], evs, xs), s
   | LOOKUP x :: ds, evs, s -> ds, V (search (evs, x)) :: evs, s
   | UNARY op :: ds, V v :: evs, s -> ds, V (do_unary (op, v)) :: evs, s
   | OPER op :: ds, V v2 :: V v1 :: evs, s -> ds, V (do_oper (op, v1, v2)) :: evs, s
@@ -367,9 +367,7 @@ let rec compile = function
     @ leave_scope
   | EmptyList -> [ PUSH EMPTYLIST ]
   | ListCase (e, e1, (x, (xs, e2))) ->
-    compile e
-    @ [ LISTCASE (compile e1, (BIND [ x; xs ] :: compile e2) @ leave_scope @ leave_scope)
-      ]
+    compile e @ [ LISTCASE (compile e1, (BIND [ x; xs ] :: compile e2) @ leave_scope) ]
 ;;
 
 (* The initial Slang state is the Slang state : all locations contain 0 *)

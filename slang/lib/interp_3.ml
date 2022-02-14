@@ -264,12 +264,12 @@ let step (cp, evs) =
   | POP, _s :: evs -> cp + 1, evs
   | SWAP, s1 :: s2 :: evs -> cp + 1, s2 :: s1 :: evs
   | BIND xs, evs ->
-    let rec bind_many evs' = function
-      | V v :: evs, x :: xs -> EV [ x, v ] :: bind_many evs' (evs, xs)
-      | evs, [] -> evs' @ evs
+    let rec bind_many = function
+      | EV envs, V v :: evs, x :: xs -> bind_many (EV ((x, v) :: envs), evs, xs)
+      | ev, evs, [] -> ev :: evs
       | _ -> complain ("step : bad state = " ^ string_of_state (cp, evs) ^ "\n")
     in
-    cp + 1, bind_many [] (evs, xs)
+    cp + 1, bind_many (EV [], evs, xs)
   | LOOKUP x, evs -> cp + 1, V (search (evs, x)) :: evs
   | UNARY op, V v :: evs -> cp + 1, V (do_unary (op, v)) :: evs
   | OPER op, V v2 :: V v1 :: evs -> cp + 1, V (do_oper (op, v1, v2)) :: evs
@@ -454,7 +454,7 @@ let rec comp = function
       @ [ LISTCASE (cons_label, None) ]
       @ c1
       @ [ GOTO (after_cons_label, None); LABEL cons_label ]
-      @ ((BIND [ x; xs ] :: c2) @ [ SWAP; POP ] @ [ SWAP; POP ])
+      @ ((BIND [ x; xs ] :: c2) @ [ SWAP; POP ])
       @ [ LABEL after_cons_label ] )
 ;;
 
