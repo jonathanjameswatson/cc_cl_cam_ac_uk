@@ -31,9 +31,8 @@ let free_vars (bvars, exp) =
     | While (e1, e2) -> aux bound (aux bound free e1) e2
     | Seq [] -> free
     | Seq (e :: rest) -> aux bound (aux bound free e) (Seq rest)
-    | ListCase (e, _e1, (x, l2)) ->
-      let _, e2 = l2 in
-      lambda bound (lambda bound (aux bound free e) (x, e2)) l2
+    | ListCase (e, e1, (x, (xs, l2))) ->
+      lambda bound (aux bound (aux bound free e) e1) (x, Lambda (xs, l2))
     | _ -> free
   and lambda bound free (x, e) = aux (x :: bound) free e in
   aux bvars [] exp
