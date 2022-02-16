@@ -20,14 +20,15 @@ type stack_item =
   | STACK_UNIT
   | STACK_HI of heap_index (* Pointer into Heap            *)
   | STACK_RA of code_index (* return address               *)
-  | STACK_FP of stack_index
-(* Frame pointer                *)
+  | STACK_FP of stack_index (* Frame pointer                *)
+  | STACK_EMPTYLIST
 
 type heap_type =
   | HT_PAIR
   | HT_INL
   | HT_INR
   | HT_CLOSURE
+  | HT_CONS
 
 type heap_item =
   | HEAP_INT of int
@@ -35,8 +36,9 @@ type heap_item =
   | HEAP_UNIT
   | HEAP_HI of heap_index (* Pointer into Heap            *)
   | HEAP_CI of code_index (* Code pointer for closures    *)
-  | HEAP_HEADER of int * heap_type
-(* int is number of items to follow *)
+  | HEAP_HEADER of int * heap_type (* int is number of items to follow *)
+  | HEAP_EMPTYLIST
+
 
 type value_path =
   | STACK_LOCATION of offset
@@ -66,6 +68,7 @@ type instruction =
   | GOTO of location
   | LABEL of label
   | HALT
+  | LISTCASE of location
 
 type vm_state =
   { stack_bound : stack_index

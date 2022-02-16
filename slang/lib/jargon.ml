@@ -22,14 +22,15 @@ type stack_item =
   | STACK_UNIT
   | STACK_HI of heap_index (* Pointer into Heap            *)
   | STACK_RA of code_index (* return address               *)
-  | STACK_FP of stack_index
-(* Frame pointer                *)
+  | STACK_FP of stack_index (* Frame pointer                *)
+  | STACK_EMPTYLIST
 
 type heap_type =
   | HT_PAIR
   | HT_INL
   | HT_INR
   | HT_CLOSURE
+  | HT_CONS
 
 type heap_item =
   | HEAP_INT of int
@@ -37,8 +38,8 @@ type heap_item =
   | HEAP_UNIT
   | HEAP_HI of heap_index (* Pointer into Heap            *)
   | HEAP_CI of code_index (* Code pointer for closures    *)
-  | HEAP_HEADER of int * heap_type
-(* int is number of items to follow *)
+  | HEAP_HEADER of int * heap_type (* int is number of items to follow *)
+  | HEAP_EMPTYLIST
 
 type value_path =
   | STACK_LOCATION of offset
@@ -68,6 +69,7 @@ type instruction =
   | GOTO of location
   | LABEL of label
   | HALT
+  | LISTCASE of location
 
 type listing = instruction list
 
@@ -114,6 +116,7 @@ let string_of_stack_item = function
   | STACK_HI i -> "STACK_HI " ^ string_of_int i
   | STACK_RA i -> "STACK_RA " ^ string_of_int i
   | STACK_FP i -> "STACK_FP " ^ string_of_int i
+  | STACK_EMPTYLIST -> "STACK_EMPTYLIST"
 ;;
 
 let string_of_heap_type = function
@@ -121,6 +124,7 @@ let string_of_heap_type = function
   | HT_INL -> "HT_INL"
   | HT_INR -> "HT_INR"
   | HT_CLOSURE -> "HT_CLOSURE"
+  | HT_CONS -> "HT_CONS"
 ;;
 
 let string_of_heap_item = function
@@ -132,6 +136,7 @@ let string_of_heap_item = function
   | HEAP_CI i -> "HEAP_CI " ^ string_of_int i
   | HEAP_HEADER (i, t) ->
     "HEAP_HEADER(" ^ string_of_int i ^ ", " ^ string_of_heap_type t ^ ")"
+  | HEAP_EMPTYLIST -> "HEAP_EMPTYLIST"
 ;;
 
 let string_of_value_path = function
@@ -168,6 +173,7 @@ let string_of_instruction = function
   | ASSIGN -> "ASSIGN"
   | MK_CLOSURE (loc, n) ->
     "MK_CLOSURE(" ^ string_of_location loc ^ ", " ^ string_of_int n ^ ")"
+  | LISTCASE l -> "LISTCASE " ^ string_of_location l
 ;;
 
 let rec string_of_listing = function
@@ -224,21 +230,36 @@ let string_of_state vm =
    pretty-print heap and stack values
 *)
 let rec string_of_heap_value a vm =
-  match Array.get vm.heap a with
-  | HEAP_INT i -> string_of_int i
-  | HEAP_BOOL true -> "true"
-  | HEAP_BOOL false -> "false"
-  | HEAP_UNIT -> "()"
-  | HEAP_HI i -> string_of_heap_value i vm
-  | HEAP_CI _ ->
-    Errors.complain "string_of_heap_value: expecting value in heap, found code index"
-  | HEAP_HEADER (_i, ht) ->
-    (match ht with
-    | HT_PAIR ->
-      "(" ^ string_of_heap_value (a + 1) vm ^ ", " ^ string_of_heap_value (a + 2) vm ^ ")"
-    | HT_INL -> "inl(" ^ string_of_heap_value (a + 1) vm ^ ")"
-    | HT_INR -> "inr(" ^ string_of_heap_value (a + 1) vm ^ ")"
-    | HT_CLOSURE -> "CLOSURE")
+  let rec string_of_heap_value_wrapped should_wrap a vm =
+    match Array.get vm.heap a with
+    | HEAP_INT i -> string_of_int i
+    | HEAP_BOOL true -> "true"
+    | HEAP_BOOL false -> "false"
+    | HEAP_UNIT -> "()"
+    | HEAP_HI i -> string_of_heap_value_wrapped should_wrap i vm
+    | HEAP_CI _ ->
+      Errors.complain "string_of_heap_value: expecting value in heap, found code index"
+    | HEAP_HEADER (_i, ht) ->
+      (match ht with
+      | HT_PAIR ->
+        "("
+        ^ string_of_heap_value (a + 1) vm
+        ^ ", "
+        ^ string_of_heap_value (a + 2) vm
+        ^ ")"
+      | HT_INL -> "inl(" ^ string_of_heap_value (a + 1) vm ^ ")"
+      | HT_INR -> "inr(" ^ string_of_heap_value (a + 1) vm ^ ")"
+      | HT_CLOSURE -> "CLOSURE"
+      | HT_CONS ->
+        let inner =
+          string_of_heap_value_wrapped true (a + 1) vm
+          ^ " :: "
+          ^ string_of_heap_value (a + 2) vm
+        in
+        if should_wrap then "(" ^ inner ^ ")" else inner)
+    | HEAP_EMPTYLIST -> "[]"
+  in
+  string_of_heap_value_wrapped false a vm
 ;;
 
 let string_of_value vm =
@@ -252,6 +273,7 @@ let string_of_value vm =
     Errors.complain "string_of_value: expecting value on stack top, found code index"
   | STACK_FP _ ->
     Errors.complain "string_of_value: expecting value on stack top, found frame pointer"
+  | STACK_EMPTYLIST -> "[]"
 ;;
 
 (***************************** THE MACHINE ********************************)
@@ -268,6 +290,7 @@ let stack_to_heap_item = function
   | STACK_HI i -> HEAP_HI i
   | STACK_RA i -> HEAP_CI i
   | STACK_FP _i -> Errors.complain "stack_to_heap_item: no frame pointer allowed on heap"
+  | STACK_EMPTYLIST -> HEAP_EMPTYLIST
 ;;
 
 let heap_to_stack_item = function
@@ -278,6 +301,7 @@ let heap_to_stack_item = function
   | HEAP_CI i -> STACK_RA i
   | HEAP_HEADER (_, _) ->
     Errors.complain "heap_to_stack_item : heap header not allowed on stack"
+  | HEAP_EMPTYLIST -> STACK_EMPTYLIST
 ;;
 
 (* cp := cp + 1  *)
@@ -322,26 +346,6 @@ let do_unary = function
   | READ, STACK_UNIT -> STACK_INT (readint ())
   | op, _ ->
     Errors.complain ("do_unary: malformed unary operator: " ^ string_of_unary_oper op)
-;;
-
-let do_oper = function
-  | AND, STACK_BOOL m, STACK_BOOL n -> STACK_BOOL (m && n)
-  | OR, STACK_BOOL m, STACK_BOOL n -> STACK_BOOL (m || n)
-  | EQB, STACK_BOOL m, STACK_BOOL n -> STACK_BOOL (m = n)
-  | LT, STACK_INT m, STACK_INT n -> STACK_BOOL (m < n)
-  | EQI, STACK_INT m, STACK_INT n -> STACK_BOOL (m = n)
-  | ADD, STACK_INT m, STACK_INT n -> STACK_INT (m + n)
-  | SUB, STACK_INT m, STACK_INT n -> STACK_INT (m - n)
-  | MUL, STACK_INT m, STACK_INT n -> STACK_INT (m * n)
-  | DIV, STACK_INT m, STACK_INT n -> STACK_INT (m / n)
-  | op, _, _ ->
-    Errors.complain ("do_oper: malformed binary operator: " ^ string_of_oper op)
-;;
-
-let perform_op (op, vm) =
-  let v_right, vm1 = pop_top vm in
-  let v_left, vm2 = pop_top vm1 in
-  push (do_oper (op, v_left, v_right), vm2)
 ;;
 
 let perform_unary (op, vm) =
@@ -424,6 +428,38 @@ let mk_inr vm =
   push (STACK_HI a, vm2)
 ;;
 
+let alloc_cons v_left v_right vm =
+  let a, vm1 = allocate (3, vm) in
+  let header = HEAP_HEADER (3, HT_CONS) in
+  let _ = Array.set vm.heap a header in
+  let _ = Array.set vm.heap (a + 1) (stack_to_heap_item v_left) in
+  let _ = Array.set vm.heap (a + 2) (stack_to_heap_item v_right) in
+  vm1, a
+;;
+
+let do_oper vm = function
+  | AND, STACK_BOOL m, STACK_BOOL n -> STACK_BOOL (m && n), vm
+  | OR, STACK_BOOL m, STACK_BOOL n -> STACK_BOOL (m || n), vm
+  | EQB, STACK_BOOL m, STACK_BOOL n -> STACK_BOOL (m = n), vm
+  | LT, STACK_INT m, STACK_INT n -> STACK_BOOL (m < n), vm
+  | EQI, STACK_INT m, STACK_INT n -> STACK_BOOL (m = n), vm
+  | ADD, STACK_INT m, STACK_INT n -> STACK_INT (m + n), vm
+  | SUB, STACK_INT m, STACK_INT n -> STACK_INT (m - n), vm
+  | MUL, STACK_INT m, STACK_INT n -> STACK_INT (m * n), vm
+  | DIV, STACK_INT m, STACK_INT n -> STACK_INT (m / n), vm
+  | CONS, item1, item2 ->
+    let vm1, a = alloc_cons item1 item2 vm in
+    STACK_HI a, vm1
+  | op, _, _ ->
+    Errors.complain ("do_oper: malformed binary operator: " ^ string_of_oper op)
+;;
+
+let perform_op (op, vm) =
+  let v_right, vm1 = pop_top vm in
+  let v_left, vm2 = pop_top vm1 in
+  push (do_oper vm2 (op, v_left, v_right))
+;;
+
 let case (i, vm) =
   let c, vm1 = pop_top vm in
   match c with
@@ -432,6 +468,21 @@ let case (i, vm) =
     (match vm1.heap.(a) with
     | HEAP_HEADER (_, HT_INR) -> goto (i, vm2)
     | HEAP_HEADER (_, HT_INL) -> advance_cp vm2
+    | _ -> Errors.complain "case: runtime error, expecting union header in heap")
+  | _ -> Errors.complain "case: runtime error, expecting heap index on top of stack"
+;;
+
+let list_case (i, vm) =
+  let c, vm1 = pop_top vm in
+  match c with
+  | STACK_EMPTYLIST -> advance_cp vm
+  | STACK_HI a ->
+    (match vm1.heap.(a) with
+    | HEAP_EMPTYLIST -> advance_cp vm
+    | HEAP_HEADER (_, HT_CONS) ->
+      let vm2 = push (heap_to_stack_item vm.heap.(a + 2), vm1) in
+      let vm3 = push (heap_to_stack_item vm.heap.(a + 1), vm2) in
+      goto (i, vm3)
     | _ -> Errors.complain "case: runtime error, expecting union header in heap")
   | _ -> Errors.complain "case: runtime error, expecting heap index on top of stack"
 ;;
@@ -546,6 +597,7 @@ let step vm =
   | GOTO (_, Some i) -> goto (i, vm)
   | TEST (_, Some i) -> test (i, vm)
   | CASE (_, Some i) -> case (i, vm)
+  | LISTCASE (_, Some i) -> list_case (i, vm)
   | _ -> Errors.complain ("step : bad state = " ^ string_of_state vm ^ "\n")
 ;;
 
@@ -571,6 +623,7 @@ let map_instruction_labels f = function
   | TEST (lab, _) -> TEST (lab, Some (f lab))
   | CASE (lab, _) -> CASE (lab, Some (f lab))
   | MK_CLOSURE ((lab, _), n) -> MK_CLOSURE ((lab, Some (f lab)), n)
+  | LISTCASE (lab, _) -> LISTCASE (lab, Some (f lab))
   | inst -> inst
 ;;
 
@@ -774,6 +827,20 @@ let rec comp vmap = function
     let defs1, c1 = comp vmap (Lambda (f, e2)) in
     let defs2, c2 = comp_lambda vmap (Some f, x, e1) in
     defs1 @ defs2, c2 @ c1 @ [ APPLY ]
+  | EmptyList -> [], [ PUSH STACK_EMPTYLIST ]
+  | ListCase (e1, e2, (x, (xs, e3))) ->
+    let cons_label = new_label () in
+    let after_cons_label = new_label () in
+    let defs1, c1 = comp vmap e1 in
+    let defs2, c2 = comp vmap e2 in
+    let defs3, c3 = comp vmap (Lambda (x, Lambda (xs, e3))) in
+    ( defs1 @ defs2 @ defs3
+    , c1
+      @ [ LISTCASE (cons_label, None) ]
+      @ c2
+      @ [ GOTO (after_cons_label, None); LABEL cons_label ]
+      @ c3
+      @ [ APPLY; APPLY; LABEL after_cons_label ] )
 
 and comp_lambda vmap (f_opt, x, e) =
   let bound_vars =
