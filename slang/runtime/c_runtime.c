@@ -43,10 +43,10 @@ int64_t *alloc(arena_t heap, int64_t n)
 }
 
 /* read in an integer from the command line */
-int32_t read() {
-  int32_t got = 0;
+int64_t read() {
+  int64_t got = 0;
   printf("> ");
-  int result = scanf("%i", &got);
+  int result = scanf("%ld", &got);
   if (result == EOF) {
     fprintf(stderr, "stdin died :(\n");
     exit(1);
