@@ -10,6 +10,10 @@
 
 This directory contains OCaml code implementing high-level interpreters for the language Slang (= Simple LANGuage), a fragment of the language L3 from 1B Semantics.
 
+## Extensions
+
+My list and list pattern matching extensions to the compiler can be found in the [extensions branch](https://github.com/jonathanjameswatson/slang_dune/tree/extensions).
+
 ## Building
 
 Install [Dune](https://dune-build). Build the project with `dune build`. Install `slang` with `dune install`. Format the code with `dune build @fmt` and `dune promote`.
