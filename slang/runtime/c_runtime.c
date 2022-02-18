@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* arena's are taken Lab 7 of from https://www.cl.cam.ac.uk/teaching/1819/ProgC/materials.html */ 
+/* arena's are taken Lab 7 of from https://www.cl.cam.ac.uk/teaching/1819/ProgC/materials.html */
 
 typedef struct arena *arena_t;
 struct arena
@@ -16,12 +16,12 @@ struct arena
 arena_t create_arena(int size)
 {
   arena_t arena = malloc(sizeof(struct arena));
-  
+
   arena->size = size;
   arena->current = 0;
-  
+
   arena->elements = malloc(size * sizeof(int64_t));
-  
+
   return arena;
 }
 
@@ -33,20 +33,20 @@ void arena_free(arena_t a)
 
 int64_t *alloc(arena_t heap, int64_t n)
 {
-  if (heap->size < heap->current +n) {
-    fprintf(stderr, "heap space exhausted(\n");
+  if (heap->size < heap->current + n) {
+    fprintf(stderr, "heap space exhausted\n");
     exit(1);
   }
   int64_t *new_record = heap->elements + heap->current;
   heap->current = heap->current + n;
-  return new_record; 
+  return new_record;
 }
 
-/* read in an integer from the command line */ 
-int64_t read() {
-  int64_t got = 0;
+/* read in an integer from the command line */
+int32_t read() {
+  int32_t got = 0;
   printf("> ");
-  int result = scanf("%ld", &got);
+  int result = scanf("%i", &got);
   if (result == EOF) {
     fprintf(stderr, "stdin died :(\n");
     exit(1);
@@ -67,6 +67,6 @@ int64_t giria(arena_t);
 int main() {
   arena_t heap = create_arena(1024);
   printf("%ld\n", giria(heap));
-  arena_free (heap);   
+  arena_free (heap);
   return 0;
 }
