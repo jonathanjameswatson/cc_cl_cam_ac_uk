@@ -79,6 +79,30 @@ let emit_x86 e =
     cmd "pushq $0" "END EQ, push false \n";
     label l2
   in
+  let mkemptylist () =
+    cmd "movq %r11,%rdi" "BEGIN make cons, alloc x in %rdi";
+    cmd "movq $1,%rsi" "alloc xs in %rsi";
+    cmd "movq $0,%rax" "signal no floating point args";
+    cmd "pushq %r11" "%r11 is caller-saved ";
+    cmd "call alloc" "C-call, so result in %rax";
+    cmd "popq %r11" "restore %r11";
+    cmd "movq $0,(%rax)" "copy emptylist tag to the heap";
+    cmd "pushq %rax" "END make emptylist, push heap pointer on stack \n"
+  in
+  let mkcons () =
+    cmd "movq %r11,%rdi" "BEGIN make cons, alloc x in %rdi";
+    cmd "movq $3,%rsi" "alloc xs in %rsi";
+    cmd "movq $0,%rax" "signal no floating point args";
+    cmd "pushq %r11" "%r11 is caller-saved ";
+    cmd "call alloc" "C-call, so result in %rax";
+    cmd "popq %r11" "restore %r11";
+    cmd "movq $1,(%rax)" "copy cons tag to the heap";
+    cmd "popq %r10" "pop xs into %r10";
+    cmd "movq %r10,16(%rax)" "copy xs to heap";
+    cmd "popq %r10" "pop x into %r10";
+    cmd "movq %r10,8(%rax)" "copy x to heap";
+    cmd "pushq %rax" "END make cons, push heap pointer on stack \n"
+  in
   let binary = function
     | AND -> complain "AND: not yet implemented in x86"
     | OR -> complain "OR: not yet implemented in x86"
@@ -115,6 +139,7 @@ let emit_x86 e =
       cmd "cqto" "prepare for div (read x86 docs!)";
       cmd "idivq %r10" "do the div, result in %rax";
       cmd "pushq %rax" "END div, push result \n"
+    | CONS -> mkcons ()
   in
   let mkpair () =
     cmd "movq %r11,%rdi" "BEGIN make pair, alloc arg 1 in %rdi";
@@ -252,6 +277,19 @@ let emit_x86 e =
     cmd "ret" "END retrun, this pops return address, jumps there \n"
     (* emit command *)
   in
+  let listcase l =
+    let l1 = new_label () in
+    cmd "popq %rax" "BEGIN listcase, pop heap pointer into %rax";
+    cmd "movq (%rax),%r10" "get tag";
+    cmd "cmpq $1,%r10" "compare tag to cons tag";
+    cmd ("jne " ^ l1) "jump if not equal \n";
+    cmd "movq 16(%rax),%r10" "get the xs value";
+    cmd "pushq %r10" "push the x value";
+    cmd "movq 8(%rax),%r10" "get the x value";
+    cmd "pushq %r10" "push the xs value";
+    cmd ("jmp " ^ l) "END listcase, jump to label";
+    label l1
+  in
   let emitc = function
     | UNARY op -> unary op
     | OPER op -> binary op
@@ -286,6 +324,8 @@ let emit_x86 e =
     | PUSH (STACK_FP _i) ->
       complain "Internal Error : Jargon code never explicitly pushes frame pointer"
     | HALT -> complain "HALT found in Jargon code from Jargon.comp"
+    | PUSH STACK_EMPTYLIST -> mkemptylist ()
+    | LISTCASE (l, _) -> listcase l
   in
   let rec emitl = function
     | [] -> ()
