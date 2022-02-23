@@ -58,7 +58,7 @@ let emit_x86 e =
       cmd "movq $0,%rax" "signal no floating point args";
       cmd "pushq %r11" "%r11 is caller-saved ";
       cmd "movq %rsp, %rbx" "save stack pointer temporarily into %rbx";
-      cmd "andq $-16, %rsp" "align stack to closest 16 bits";
+      cmd "andq $-16, %rsp" "align stack to closest 16 bytes";
       cmd "call read" "get user input";
       cmd "movq %rbx , %rsp" "restore stack pointer from %rbx";
       cmd "popq %r11" "restore %r11";
